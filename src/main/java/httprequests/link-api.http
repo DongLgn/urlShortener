@@ -1,0 +1,7 @@
+### Create a new short link
+POST http://localhost:8080/api/shorten
+Content-Type: application/json
+
+{
+  "longUrl": "https://docs.spring.io/spring-framework/docs/current/reference/html/web.html"
+}
