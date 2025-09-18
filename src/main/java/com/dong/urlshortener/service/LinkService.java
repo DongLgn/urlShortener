@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional; // 推荐加上事务
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -20,7 +21,7 @@ public class LinkService {
     // 使用 Base62 工具类 (代码与之前版本相同)
     // ...
     public class Base62 {
-        private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        private static final String ALPHABET = "5gZAmxPt4QOdEYs2h3jKn6vbyLcF0iWpU9aIu7Dr1BVfeCw8NqGzRkJSTXHMo";
 
         private static final int BASE = ALPHABET.length();
 
@@ -39,6 +40,7 @@ public class LinkService {
             return i / BASE;
         }
     }
+    private static final long OFFSET = 1000000000L;
     @Transactional
     public String getOrCreateShortLink(String longUrl) {
         // 1. 计算长链接的哈希值
@@ -67,7 +69,7 @@ public class LinkService {
             linkMapper.insertLink(newLink);
 
             // 生成短码并更新回数据库
-            String shortCode = Base62.fromBase10(newLink.getId());
+            String shortCode = Base62.fromBase10(newLink.getId()+OFFSET);
             newLink.setShortCode(shortCode);
             linkMapper.updateShortCode(newLink);
 
@@ -78,11 +80,36 @@ public class LinkService {
         }
     }
 
+    /**
+     * 根据 shortCode 获取长链接。
+     * 这是一个高性能的查询，会优先访问 Redis 缓存。
+     * @param shortCode 短码
+     * @return 原始的长链接，如果找不到则返回 null
+     */
     public String getLongUrlByShortCode(String shortCode) {
-        // TODO: 先从 Redis 缓存中查找
+        // 1. 先从 Redis 缓存中查找
+//        String longUrl = redisTemplate.opsForValue().get(shortCode);
+//
+//        if (longUrl != null) {
+//            System.out.println("缓存命中: " + shortCode + " -> " + longUrl);
+//            return longUrl;
+//        }
 
-        // 缓存未命中，则从数据库查找
-        Link link = linkMapper.findByShortCode(shortCode);
-        return (link != null) ? link.getLongUrl() : null;
+        // 2. 缓存未命中，则从数据库查找
+        System.out.println("缓存未命中，查询数据库: " + shortCode);
+        Link link = linkMapper.findByShortCode(shortCode); // 使用我们已有的 findByShortCode 方法
+
+        if (link != null) {
+            // 3. 在数据库中找到了，回填到缓存中，方便下次访问
+            // 注意：这里可以设置一个与数据库记录相匹配的过期时间
+//            long remainingSeconds = ChronoUnit.SECONDS.between(LocalDateTime.now(), link.getExpiresAt());
+//            if (remainingSeconds > 0) {
+//                redisTemplate.opsForValue().set(link.getShortCode(), link.getLongUrl(), remainingSeconds, TimeUnit.SECONDS);
+//            }
+            return link.getLongUrl();
+        }
+
+        // 4. 数据库里也找不到
+        return null;
     }
 }
